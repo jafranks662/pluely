@@ -46,13 +46,13 @@ export type IContextType = {
   setHasActiveLicense: Dispatch<SetStateAction<boolean>>;
   getActiveLicenseStatus: () => Promise<void>;
   selectedAudioDevices: {
-    input: string;
-    output: string;
+    input: { id: string; name: string };
+    output: { id: string; name: string };
   };
   setSelectedAudioDevices: Dispatch<
     SetStateAction<{
-      input: string;
-      output: string;
+      input: { id: string; name: string };
+      output: { id: string; name: string };
     }>
   >;
   setCursorType: (type: CursorType) => void;

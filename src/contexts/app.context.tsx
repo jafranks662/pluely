@@ -76,13 +76,24 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const [selectedAudioDevices, setSelectedAudioDevices] = useState<{
-    input: string;
-    output: string;
-  }>({
-    input:
-      safeLocalStorage.getItem(STORAGE_KEYS.SELECTED_AUDIO_INPUT_DEVICE) || "",
-    output:
-      safeLocalStorage.getItem(STORAGE_KEYS.SELECTED_AUDIO_OUTPUT_DEVICE) || "",
+    input: { id: string; name: string };
+    output: { id: string; name: string };
+  }>(() => {
+    const savedDevices = safeLocalStorage.getItem(
+      STORAGE_KEYS.SELECTED_AUDIO_DEVICES
+    );
+    if (savedDevices) {
+      try {
+        return JSON.parse(savedDevices);
+      } catch {
+        // Return default on parse error
+      }
+    }
+
+    return {
+      input: { id: "", name: "" },
+      output: { id: "", name: "" },
+    };
   });
 
   // AI Providers
@@ -272,6 +283,21 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (savedPluelyApiEnabled !== null) {
       setPluelyApiEnabledState(savedPluelyApiEnabled === "true");
     }
+
+    // Load selected audio devices
+    const savedAudioDevices = safeLocalStorage.getItem(
+      STORAGE_KEYS.SELECTED_AUDIO_DEVICES
+    );
+    if (savedAudioDevices) {
+      try {
+        const parsed = JSON.parse(savedAudioDevices);
+        if (parsed && typeof parsed === "object") {
+          setSelectedAudioDevices(parsed);
+        }
+      } catch {
+        console.warn("Failed to parse selected audio devices");
+      }
+    }
   };
 
   const updateCursor = (type: CursorType | undefined) => {
@@ -414,7 +440,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         e.key === STORAGE_KEYS.SELECTED_STT_PROVIDER ||
         e.key === STORAGE_KEYS.SYSTEM_PROMPT ||
         e.key === STORAGE_KEYS.SCREENSHOT_CONFIG ||
-        e.key === STORAGE_KEYS.CUSTOMIZABLE
+        e.key === STORAGE_KEYS.CUSTOMIZABLE ||
+        e.key === STORAGE_KEYS.SELECTED_AUDIO_DEVICES
       ) {
         loadData();
       }

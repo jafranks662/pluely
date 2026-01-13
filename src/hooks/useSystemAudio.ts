@@ -434,8 +434,8 @@ export function useSystemAudio() {
       setError("");
 
       const deviceId =
-        selectedAudioDevices.output !== "default"
-          ? selectedAudioDevices.output
+        selectedAudioDevices.output.id !== "default"
+          ? selectedAudioDevices.output.id
           : null;
 
       // Start a new continuous recording session
@@ -447,7 +447,7 @@ export function useSystemAudio() {
       console.error("Failed to start continuous recording:", err);
       setError(`Failed to start recording: ${err}`);
     }
-  }, [vadConfig, selectedAudioDevices.output]);
+  }, [vadConfig, selectedAudioDevices.output.id]);
 
   // Ignore current recording (stop without transcription)
   const ignoreContinuousRecording = useCallback(async () => {
@@ -589,8 +589,8 @@ export function useSystemAudio() {
       await invoke<string>("stop_system_audio_capture");
 
       const deviceId =
-        selectedAudioDevices.output !== "default"
-          ? selectedAudioDevices.output
+        selectedAudioDevices.output.id !== "default"
+          ? selectedAudioDevices.output.id
           : null;
 
       // Start capture with VAD config
@@ -603,7 +603,7 @@ export function useSystemAudio() {
       setError(errorMessage);
       setIsPopoverOpen(true);
     }
-  }, [vadConfig, selectedAudioDevices.output]);
+  }, [vadConfig, selectedAudioDevices.output.id]);
 
   const stopCapture = useCallback(async () => {
     try {

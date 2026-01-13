@@ -1,5 +1,8 @@
 // Pluely macos speaker input and stream
+use super::AudioDevice;
 use anyhow::Result;
+use ca::aggregate_device_keys as agg_keys;
+use cidre::{arc, av, cat, cf, core_audio as ca, ns, os};
 use futures_util::Stream;
 use ringbuf::{
     traits::{Consumer, Producer, Split},
@@ -8,9 +11,129 @@ use ringbuf::{
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Poll, Waker};
+use tracing::error;
 
-use ca::aggregate_device_keys as agg_keys;
-use cidre::{arc, av, cat, cf, core_audio as ca, ns, os};
+pub fn get_input_devices() -> Result<Vec<AudioDevice>> {
+    let mut devices = Vec::new();
+
+    let default_input_uid = ca::System::default_input_device()
+        .ok()
+        .and_then(|d| d.uid().ok())
+        .map(|u| u.to_string());
+
+    let all_devices = ca::System::devices()?;
+
+    for device in all_devices.iter() {
+        let input_buffers = device
+            .input_stream_cfg()
+            .map(|cfg| cfg.number_buffers())
+            .unwrap_or(0);
+
+        if input_buffers > 0 {
+            let name = device
+                .name()
+                .map(|n| n.to_string())
+                .unwrap_or_else(|_| "Unknown Device".to_string());
+            let uid = device
+                .uid()
+                .map(|u| u.to_string())
+                .unwrap_or_else(|_| format!("macos_input_unknown"));
+            let is_default = default_input_uid
+                .as_ref()
+                .map(|def| def == &uid)
+                .unwrap_or(false);
+
+            devices.push(AudioDevice {
+                id: uid,
+                name,
+                is_default,
+            });
+        }
+    }
+
+    Ok(devices)
+}
+
+pub fn get_output_devices() -> Result<Vec<AudioDevice>> {
+    let mut devices = Vec::new();
+
+    let default_output_uid = ca::System::default_output_device()
+        .ok()
+        .and_then(|d| d.uid().ok())
+        .map(|u| u.to_string());
+
+    let all_devices = ca::System::devices()?;
+
+    for device in all_devices.iter() {
+        let output_buffers = device
+            .output_stream_cfg()
+            .map(|cfg| cfg.number_buffers())
+            .unwrap_or(0);
+
+        let input_buffers = device
+            .input_stream_cfg()
+            .map(|cfg| cfg.number_buffers())
+            .unwrap_or(0);
+
+        if output_buffers > 0 {
+            let is_primarily_input = input_buffers > 0 && output_buffers == 0;
+            if !is_primarily_input {
+                let name = device
+                    .name()
+                    .map(|n| n.to_string())
+                    .unwrap_or_else(|_| "Unknown Device".to_string());
+                let uid = device
+                    .uid()
+                    .map(|u| u.to_string())
+                    .unwrap_or_else(|_| format!("macos_output_unknown"));
+                let is_default = default_output_uid
+                    .as_ref()
+                    .map(|def| def == &uid)
+                    .unwrap_or(false);
+
+                devices.push(AudioDevice {
+                    id: uid,
+                    name,
+                    is_default,
+                });
+            }
+        }
+    }
+
+    Ok(devices)
+}
+
+fn find_output_device_by_uid(uid: &str) -> Option<ca::Device> {
+    let all_devices = match ca::System::devices() {
+        Ok(d) => d,
+        Err(e) => {
+            error!(
+                "[find_output_device_by_uid] Failed to get system devices: {}",
+                e
+            );
+            return None;
+        }
+    };
+
+    for device in all_devices.into_iter() {
+        if let Ok(cfg) = device.output_stream_cfg() {
+            if cfg.number_buffers() > 0 {
+                if let Ok(device_uid) = device.uid() {
+                    if device_uid.to_string() == uid {
+                        return Some(device);
+                    }
+                }
+            }
+        }
+    }
+
+    error!(
+        "[find_output_device_by_uid] No matching device found for UID: {}",
+        uid
+    );
+    None
+}
+
 pub struct SpeakerInput {
     tap: ca::TapGuard, // Assuming ca::TapGuard from core-audio-rs
     agg_desc: arc::Retained<cf::DictionaryOf<cf::String, cf::Type>>,
@@ -46,8 +169,19 @@ struct Ctx {
 }
 
 impl SpeakerInput {
-    pub fn new(_device_id: Option<String>) -> Result<Self> {
-        let output_device = ca::System::default_output_device()?;
+    pub fn new(device_id: Option<String>) -> Result<Self> {
+        let output_device = match device_id {
+            Some(ref uid) if !uid.is_empty() && uid != "default" => {
+                match find_output_device_by_uid(uid) {
+                    Some(device) => device,
+                    None => {
+                        ca::System::default_output_device().expect("No default output device found")
+                    }
+                }
+            }
+            _ => ca::System::default_output_device()?,
+        };
+
         let output_uid = output_device.uid()?;
 
         let sub_device = cf::DictionaryOf::with_keys_values(

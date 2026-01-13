@@ -12,7 +12,7 @@ interface AutoSpeechVADProps {
   submit: UseCompletionReturn["submit"];
   setState: UseCompletionReturn["setState"];
   setEnableVAD: UseCompletionReturn["setEnableVAD"];
-  microphoneDeviceId: string;
+  microphoneDeviceId?: string;
 }
 
 const AutoSpeechVADInternal = ({
@@ -24,9 +24,10 @@ const AutoSpeechVADInternal = ({
   const [isTranscribing, setIsTranscribing] = useState(false);
   const { selectedSttProvider, allSttProviders } = useApp();
 
-  const audioConstraints: MediaTrackConstraints = microphoneDeviceId
-    ? { deviceId: { exact: microphoneDeviceId } }
-    : { deviceId: "default" };
+  const audioConstraints: MediaTrackConstraints =
+    microphoneDeviceId && microphoneDeviceId !== "default"
+      ? { deviceId: { exact: microphoneDeviceId } }
+      : {};
 
   const vad = useMicVAD({
     userSpeakingThreshold: 0.6,

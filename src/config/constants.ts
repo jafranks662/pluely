@@ -17,8 +17,7 @@ export const STORAGE_KEYS = {
   SHORTCUTS: "shortcuts",
   AUTOSTART_INITIALIZED: "autostart_initialized",
 
-  SELECTED_AUDIO_INPUT_DEVICE: "selected_audio_input_device",
-  SELECTED_AUDIO_OUTPUT_DEVICE: "selected_audio_output_device",
+  SELECTED_AUDIO_DEVICES: "selected_audio_devices",
   RESPONSE_SETTINGS: "response_settings",
   SUPPORTS_IMAGES: "supports_images",
 } as const;

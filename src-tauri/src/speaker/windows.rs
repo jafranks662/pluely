@@ -1,4 +1,5 @@
 // Pluely windows speaker input and stream
+use super::AudioDevice;
 use anyhow::Result;
 use futures_util::Stream;
 use std::collections::VecDeque;
@@ -7,20 +8,117 @@ use std::task::{Poll, Waker};
 use std::thread;
 use std::time::Duration;
 use tracing::error;
-use wasapi::{get_default_device, Direction, SampleType, StreamMode, WaveFormat};
+use wasapi::{get_default_device, DeviceCollection, Direction, SampleType, StreamMode, WaveFormat};
+
+pub fn get_input_devices() -> Result<Vec<AudioDevice>> {
+    let mut devices = Vec::new();
+
+    let default_device = get_default_device(&Direction::Capture).ok();
+    let default_id = default_device.as_ref().and_then(|d| d.get_id().ok());
+
+    let collection = DeviceCollection::new(&Direction::Capture)?;
+    let count = collection.get_nbr_devices()?;
+
+    for i in 0..count {
+        if let Ok(device) = collection.get_device_at_index(i) {
+            let name = device
+                .get_friendlyname()
+                .unwrap_or_else(|_| format!("Microphone {}", i));
+            let id = device
+                .get_id()
+                .unwrap_or_else(|_| format!("windows_input_{}", i));
+            let is_default = default_id.as_ref().map(|def| def == &id).unwrap_or(false);
+
+            devices.push(AudioDevice {
+                id,
+                name,
+                is_default,
+            });
+        }
+    }
+
+    Ok(devices)
+}
+
+pub fn get_output_devices() -> Result<Vec<AudioDevice>> {
+    let mut devices = Vec::new();
+
+    let default_device = get_default_device(&Direction::Render).ok();
+    let default_id = default_device.as_ref().and_then(|d| d.get_id().ok());
+
+    let collection = DeviceCollection::new(&Direction::Render)?;
+    let count = collection.get_nbr_devices()?;
+
+    for i in 0..count {
+        if let Ok(device) = collection.get_device_at_index(i) {
+            let name = device
+                .get_friendlyname()
+                .unwrap_or_else(|_| format!("Speaker {}", i));
+            let id = device
+                .get_id()
+                .unwrap_or_else(|_| format!("windows_output_{}", i));
+            let is_default = default_id.as_ref().map(|def| def == &id).unwrap_or(false);
+
+            devices.push(AudioDevice {
+                id,
+                name,
+                is_default,
+            });
+        }
+    }
+
+    Ok(devices)
+}
+
+fn find_device_by_id(direction: &Direction, device_id: &str) -> Option<wasapi::Device> {
+    let collection = match DeviceCollection::new(direction) {
+        Ok(c) => c,
+        Err(e) => {
+            error!(
+                "[find_device_by_id] Failed to create device collection: {}",
+                e
+            );
+            return None;
+        }
+    };
+
+    let count = match collection.get_nbr_devices() {
+        Ok(c) => c,
+        Err(e) => {
+            error!("[find_device_by_id] Failed to get device count: {}", e);
+            return None;
+        }
+    };
+
+    for i in 0..count {
+        if let Ok(device) = collection.get_device_at_index(i) {
+            if let Ok(id) = device.get_id() {
+                if id == device_id {
+                    let name = device
+                        .get_friendlyname()
+                        .unwrap_or_else(|_| "Unknown".to_string());
+                    return Some(device);
+                }
+            }
+        }
+    }
+
+    error!(
+        "[find_device_by_id] No matching device found for ID: {}",
+        device_id
+    );
+    None
+}
 
 pub struct SpeakerInput {
-    device_index: Option<usize>,
+    device_id: Option<String>,
 }
 
 impl SpeakerInput {
     pub fn new(device_id: Option<String>) -> Result<Self> {
-        let device_index = device_id.and_then(|id| {
-            id.strip_prefix("windows_output_")
-                .and_then(|s| s.parse::<usize>().ok())
-        });
-
-        Ok(Self { device_index })
+        // Store the device_id for later use in stream()
+        let device_id = device_id.filter(|id| !id.is_empty() && id != "default");
+        Ok(Self { device_id })
     }
 
     // Starts the audio stream
@@ -35,11 +133,11 @@ impl SpeakerInput {
 
         let queue_clone = sample_queue.clone();
         let waker_clone = waker_state.clone();
-        let device_index = self.device_index;
+        let device_id = self.device_id;
 
         let capture_thread = thread::spawn(move || {
             if let Err(e) =
-                SpeakerStream::capture_audio_loop(queue_clone, waker_clone, init_tx, device_index)
+                SpeakerStream::capture_audio_loop(queue_clone, waker_clone, init_tx, device_id)
             {
                 error!("Pluely Audio capture loop failed: {}", e);
             }
@@ -88,17 +186,28 @@ impl SpeakerStream {
         sample_queue: Arc<Mutex<VecDeque<f32>>>,
         waker_state: Arc<Mutex<WakerState>>,
         init_tx: mpsc::Sender<Result<u32>>,
-        device_index: Option<usize>,
+        device_id: Option<String>,
     ) -> Result<()> {
         let init_result = (|| -> Result<_> {
-            let device = match device_index {
-                Some(index) => {
-                    use wasapi::DeviceCollection;
-                    let collection = DeviceCollection::new(&Direction::Render)?;
-                    collection.get_device_at_index(index.try_into()?)?
-                }
+            let device = match device_id {
+                Some(ref id) => match find_device_by_id(&Direction::Render, id) {
+                    Some(d) => {
+                        let name = d
+                            .get_friendlyname()
+                            .unwrap_or_else(|_| "Unknown".to_string());
+                        d
+                    }
+                    None => {
+                        get_default_device(&Direction::Render).expect("No default render device")
+                    }
+                },
                 None => get_default_device(&Direction::Render)?,
             };
+
+            let device_name = device
+                .get_friendlyname()
+                .unwrap_or_else(|_| "Unknown".to_string());
+
             let mut audio_client = device.get_iaudioclient()?;
 
             let device_format = audio_client.get_mixformat()?;

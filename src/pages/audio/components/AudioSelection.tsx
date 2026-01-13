@@ -7,21 +7,15 @@ import {
   Button,
 } from "@/components";
 import { MicIcon, RefreshCwIcon, HeadphonesIcon } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useApp } from "@/contexts";
 import { STORAGE_KEYS } from "@/config/constants";
 import { safeLocalStorage } from "@/lib/storage";
+import { invoke } from "@tauri-apps/api/core";
 
 export const AudioSelection = () => {
   const { selectedAudioDevices, setSelectedAudioDevices } = useApp();
 
-  const [devices, setDevices] = useState<{
-    input: MediaDeviceInfo[];
-    output: MediaDeviceInfo[];
-  }>({
-    input: [],
-    output: [],
-  });
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
   const [showSuccess, setShowSuccess] = useState<{
     input: boolean;
@@ -30,63 +24,80 @@ export const AudioSelection = () => {
     input: false,
     output: false,
   });
+  const [devices, setDevices] = useState<{
+    input: { id: string; name: string; is_default: boolean }[];
+    output: { id: string; name: string; is_default: boolean }[];
+  }>({
+    input: [],
+    output: [],
+  });
 
-  // Helper function to restore or set default device
-  const restoreOrSetDefaultDevice = (
-    type: "input" | "output",
-    devices: MediaDeviceInfo[],
-    storageKey: string
-  ) => {
-    const savedDeviceId = safeLocalStorage.getItem(storageKey);
-    const shouldRestore =
-      savedDeviceId && devices.some((d) => d.deviceId === savedDeviceId);
-
-    if (shouldRestore) {
-      setSelectedAudioDevices((prev) => ({ ...prev, [type]: savedDeviceId }));
-    } else if (devices.length > 0) {
-      const defaultDevice = devices.find((d) => d.deviceId === "default");
-      const selectedId = defaultDevice?.deviceId || devices[0].deviceId;
-
-      setSelectedAudioDevices((prev) => ({ ...prev, [type]: selectedId }));
-      safeLocalStorage.setItem(storageKey, selectedId);
-    }
+  // Save devices to localStorage
+  const saveToStorage = (newDevices: typeof selectedAudioDevices) => {
+    safeLocalStorage.setItem(
+      STORAGE_KEYS.SELECTED_AUDIO_DEVICES,
+      JSON.stringify(newDevices)
+    );
   };
 
   // Load all audio devices (input and output)
   const loadAudioDevices = async () => {
     setIsLoadingDevices(true);
     try {
-      // Request microphone permission first
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
+      const [inputDevices, outputDevices] = await Promise.all([
+        invoke<{ id: string; name: string; is_default: boolean }[]>(
+          "get_input_devices"
+        ),
+        invoke<{ id: string; name: string; is_default: boolean }[]>(
+          "get_output_devices"
+        ),
+      ]);
+
+      setDevices({
+        input:
+          inputDevices.map((input) => ({
+            id: input?.id,
+            name: input?.name,
+            is_default: input?.is_default,
+          })) || [],
+        output:
+          outputDevices.map((output) => ({
+            id: output?.id,
+            name: output?.name,
+            is_default: output?.is_default,
+          })) || [],
       });
-      setTimeout(async () => {
-        stream.getTracks().forEach((track) => track.stop());
-      }, 2000);
 
-      // Enumerate all audio devices
-      const allDevices = await navigator.mediaDevices.enumerateDevices();
-      console.log(allDevices, "allDevices");
-      const audioInputs = allDevices.filter(
-        (device) => device.kind === "audioinput"
+      // Only update if no device is currently selected or if the selected device doesn't exist
+      const currentInputExists = inputDevices.some(
+        (d) => d.id === selectedAudioDevices.input.id
       );
-      const audioOutputs = allDevices.filter(
-        (device) => device.kind === "audiooutput"
+      const currentOutputExists = outputDevices.some(
+        (d) => d.id === selectedAudioDevices.output.id
       );
 
-      setDevices({ input: audioInputs, output: audioOutputs });
+      if (!currentInputExists || !currentOutputExists) {
+        const defaultInput = inputDevices?.find((d) => d?.is_default);
+        const defaultOutput = outputDevices?.find((d) => d?.is_default);
 
-      // Restore or set default devices
-      restoreOrSetDefaultDevice(
-        "input",
-        audioInputs,
-        STORAGE_KEYS.SELECTED_AUDIO_INPUT_DEVICE
-      );
-      restoreOrSetDefaultDevice(
-        "output",
-        audioOutputs,
-        STORAGE_KEYS.SELECTED_AUDIO_OUTPUT_DEVICE
-      );
+        const newDevices = {
+          input: currentInputExists
+            ? selectedAudioDevices.input
+            : {
+                id: defaultInput?.id || inputDevices[0]?.id || "",
+                name: defaultInput?.name || inputDevices[0]?.name || "",
+              },
+          output: currentOutputExists
+            ? selectedAudioDevices.output
+            : {
+                id: defaultOutput?.id || outputDevices[0]?.id || "",
+                name: defaultOutput?.name || outputDevices[0]?.name || "",
+              },
+        };
+
+        setSelectedAudioDevices(newDevices);
+        saveToStorage(newDevices);
+      }
     } catch (error) {
       console.error("Error loading audio devices:", error);
     } finally {
@@ -94,19 +105,24 @@ export const AudioSelection = () => {
     }
   };
 
+  useEffect(() => {
+    loadAudioDevices();
+  }, []);
+
   // Handle device selection changes
   const handleDeviceChange = (type: "input" | "output", deviceId: string) => {
-    setSelectedAudioDevices((prev) => ({
-      ...prev,
-      [type]: deviceId,
-    }));
+    const deviceList = type === "input" ? devices.input : devices.output;
+    const selectedDevice = deviceList.find((d) => d.id === deviceId);
 
-    const storageKey =
-      type === "input"
-        ? STORAGE_KEYS.SELECTED_AUDIO_INPUT_DEVICE
-        : STORAGE_KEYS.SELECTED_AUDIO_OUTPUT_DEVICE;
+    if (!selectedDevice) return;
 
-    safeLocalStorage.setItem(storageKey, deviceId);
+    const newDevices = {
+      ...selectedAudioDevices,
+      [type]: { id: deviceId, name: selectedDevice.name },
+    };
+
+    setSelectedAudioDevices(newDevices);
+    saveToStorage(newDevices);
 
     setShowSuccess((prev) => ({ ...prev, [type]: true }));
     setTimeout(() => {
@@ -128,9 +144,9 @@ export const AudioSelection = () => {
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Select
-                value={selectedAudioDevices.input}
+                value={selectedAudioDevices.input.id}
                 onValueChange={(value) => handleDeviceChange("input", value)}
-                disabled={isLoadingDevices || devices.input.length === 0}
+                disabled={isLoadingDevices || devices?.input?.length === 0}
               >
                 <SelectTrigger className="w-full h-11 border-1 border-input/50 focus:border-primary/50 transition-colors">
                   <div className="flex items-center gap-2">
@@ -138,23 +154,26 @@ export const AudioSelection = () => {
                     <div className="text-sm font-medium truncate">
                       {isLoadingDevices
                         ? "Loading microphones..."
-                        : devices.input.length === 0
+                        : devices?.input?.length === 0
                         ? "No microphones found"
-                        : devices.input.find(
-                            (mic) => mic.deviceId === selectedAudioDevices.input
-                          )?.label || "Select a microphone"}
+                        : devices?.input?.find(
+                            (mic) => mic?.id === selectedAudioDevices.input.id
+                          )?.name +
+                            (devices?.input?.find(
+                              (mic) => mic?.id === selectedAudioDevices.input.id
+                            )?.is_default
+                              ? " (Default)"
+                              : "") || "Select a microphone"}
                     </div>
                   </div>
                 </SelectTrigger>
                 <SelectContent>
-                  {devices.input.map((mic) => (
-                    <SelectItem key={mic.deviceId} value={mic.deviceId}>
+                  {devices?.input?.map((mic) => (
+                    <SelectItem key={mic?.id} value={mic?.id}>
                       <div className="flex items-center gap-2">
                         <MicIcon className="size-4" />
-                        <div className="font-medium truncate">
-                          {mic.label ||
-                            `Microphone ${mic.deviceId.slice(0, 8)}`}
-                        </div>
+                        <div className="font-medium truncate">{mic?.name} </div>
+                        {mic?.is_default && " (Default)"}
                       </div>
                     </SelectItem>
                   ))}
@@ -182,15 +201,12 @@ export const AudioSelection = () => {
             <div className="text-xs text-green-500 bg-green-500/10 p-3 rounded-md">
               <strong>✓ Microphone changed successfully!</strong>
               <br />
-              Using:{" "}
-              {devices.input.find(
-                (mic) => mic.deviceId === selectedAudioDevices.input
-              )?.label || "Unknown device"}
+              Using: {selectedAudioDevices.input.name || "Unknown device"}
             </div>
           )}
 
           {/* Permission Notice */}
-          {devices.input.length === 0 && !isLoadingDevices && (
+          {devices?.input?.length === 0 && !isLoadingDevices && (
             <div className="text-xs text-amber-500 bg-amber-500/10 p-3 rounded-md">
               <strong>
                 ⚠️ Click the refresh button to load your microphone devices.
@@ -224,9 +240,9 @@ export const AudioSelection = () => {
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Select
-                value={selectedAudioDevices.output}
+                value={selectedAudioDevices.output.id}
                 onValueChange={(value) => handleDeviceChange("output", value)}
-                disabled={isLoadingDevices || devices.output.length === 0}
+                disabled={isLoadingDevices || devices?.output?.length === 0}
               >
                 <SelectTrigger className="w-full h-11 border-1 border-input/50 focus:border-primary/50 transition-colors">
                   <div className="flex items-center gap-2">
@@ -234,22 +250,28 @@ export const AudioSelection = () => {
                     <div className="text-sm font-medium truncate">
                       {isLoadingDevices
                         ? "Loading output devices..."
-                        : devices.output.length === 0
+                        : devices?.output?.length === 0
                         ? "No output devices found"
-                        : devices.output.find(
+                        : devices?.output?.find(
                             (output) =>
-                              output.deviceId === selectedAudioDevices.output
-                          )?.label || "Select an output device"}
+                              output?.id === selectedAudioDevices.output.id
+                          )?.name +
+                            (devices?.output?.find(
+                              (output) =>
+                                output?.id === selectedAudioDevices.output.id
+                            )?.is_default
+                              ? " (Default)"
+                              : "") || "Select an output device"}
                     </div>
                   </div>
                 </SelectTrigger>
                 <SelectContent>
-                  {devices.output.map((output) => (
-                    <SelectItem key={output.deviceId} value={output.deviceId}>
+                  {devices?.output?.map((output) => (
+                    <SelectItem key={output?.id} value={output?.id}>
                       <div className="flex items-center gap-2">
                         <HeadphonesIcon className="size-4" />
                         <div className="font-medium truncate">
-                          {output.label}
+                          {output?.name} {output?.is_default && " (Default)"}
                         </div>
                       </div>
                     </SelectItem>
@@ -278,15 +300,12 @@ export const AudioSelection = () => {
             <div className="text-xs text-green-500 bg-green-500/10 p-3 rounded-md">
               <strong>✓ Output device changed successfully!</strong>
               <br />
-              Using:{" "}
-              {devices.output.find(
-                (output) => output.deviceId === selectedAudioDevices.output
-              )?.label || "Unknown device"}
+              Using: {selectedAudioDevices.output.name || "Unknown device"}
             </div>
           )}
 
           {/* Permission Notice */}
-          {devices.output.length === 0 && !isLoadingDevices && (
+          {devices?.output?.length === 0 && !isLoadingDevices && (
             <div className="text-xs text-amber-500 bg-amber-500/10 p-3 rounded-md">
               <strong>
                 ⚠️ Click the refresh button to load your system audio devices.

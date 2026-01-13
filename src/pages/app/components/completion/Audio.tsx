@@ -22,11 +22,11 @@ export const Audio = ({
       <PopoverTrigger asChild>
         {(pluelyApiEnabled || speechProviderStatus) && enableVAD ? (
           <AutoSpeechVAD
-            key={selectedAudioDevices.input}
+            key={selectedAudioDevices.input.id}
             submit={submit}
             setState={setState}
             setEnableVAD={setEnableVAD}
-            microphoneDeviceId={selectedAudioDevices.input}
+            microphoneDeviceId={selectedAudioDevices.input.id}
           />
         ) : (
           <Button

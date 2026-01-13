@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components";
 import { AudioVisualizer } from "@/pages/app/components/speech/audio-visualizer";
 import { shouldUsePluelyAPI, fetchSTT } from "@/lib";
@@ -16,7 +16,8 @@ export const AudioRecorder = ({
   onTranscriptionComplete,
   onCancel,
 }: AudioRecorderProps) => {
-  const { selectedSttProvider, allSttProviders } = useApp();
+  const { selectedSttProvider, allSttProviders, selectedAudioDevices } =
+    useApp();
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -26,13 +27,11 @@ export const AudioRecorder = ({
   const startTimeRef = useRef<number>(0);
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const maxDurationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
-  useEffect(() => {
-    startRecording();
-    return () => cleanup();
-  }, []);
-
-  const cleanup = () => {
+  // Cleanup function - stops all tracks and clears refs
+  const cleanup = useCallback(() => {
+    // Clear timers
     if (durationIntervalRef.current) {
       clearInterval(durationIntervalRef.current);
       durationIntervalRef.current = null;
@@ -41,19 +40,61 @@ export const AudioRecorder = ({
       clearTimeout(maxDurationTimeoutRef.current);
       maxDurationTimeoutRef.current = null;
     }
-    if (audioStream) {
-      audioStream.getTracks().forEach((track) => track.stop());
-      setAudioStream(null);
-    }
+
+    // Stop media recorder
     if (mediaRecorderRef.current?.state === "recording") {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current = null;
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (e) {
+        // Ignore errors when stopping
+      }
     }
-  };
+    mediaRecorderRef.current = null;
+
+    // Stop all audio tracks - this is critical for releasing the microphone
+    const stream = streamRef.current;
+    if (stream) {
+      stream.getTracks().forEach((track) => {
+        track.stop();
+        track.enabled = false;
+      });
+      streamRef.current = null;
+    }
+
+    // Also stop from state
+    if (audioStream) {
+      audioStream.getTracks().forEach((track) => {
+        track.stop();
+        track.enabled = false;
+      });
+    }
+    setAudioStream(null);
+  }, [audioStream]);
+
+  useEffect(() => {
+    startRecording();
+
+    // Cleanup on unmount
+    return () => {
+      cleanup();
+    };
+  }, []);
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const deviceId = selectedAudioDevices?.input?.id;
+
+      const audioConstraints: MediaTrackConstraints =
+        deviceId && deviceId !== "default"
+          ? { deviceId: { exact: deviceId } }
+          : {};
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: audioConstraints,
+      });
+
+      // Store in both ref and state
+      streamRef.current = stream;
       setAudioStream(stream);
 
       const mimeType = MediaRecorder.isTypeSupported("audio/webm")
@@ -102,6 +143,7 @@ export const AudioRecorder = ({
     const mimeType = mediaRecorderRef.current.mimeType;
     const chunks = [...audioChunksRef.current];
 
+    // Cleanup immediately after getting chunks
     cleanup();
 
     try {
