@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
-import { KeyIcon, TrashIcon, LoaderIcon, ChevronDown } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { ChevronDown } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useApp } from "@/contexts";
 import {
   Button,
   Header,
-  Input,
   Switch,
   Command,
   CommandEmpty,
@@ -18,21 +17,7 @@ import {
   PopoverTrigger,
 } from "@/components";
 
-interface ActivationResponse {
-  activated: boolean;
-  error?: string;
-  license_key?: string;
-  instance?: {
-    id: string;
-    name: string;
-    created_at: string;
-  };
-  is_dev_license?: boolean;
-}
-
 interface StorageResult {
-  license_key?: string;
-  instance_id?: string;
   selected_pluely_model?: string;
 }
 
@@ -46,26 +31,16 @@ interface Model {
   isAvailable: boolean;
 }
 
-const LICENSE_KEY_STORAGE_KEY = "pluely_license_key";
-const INSTANCE_ID_STORAGE_KEY = "pluely_instance_id";
 const SELECTED_PLUELY_MODEL_STORAGE_KEY = "selected_pluely_model";
 
 export const PluelyApiSetup = () => {
   const {
     pluelyApiEnabled,
     setPluelyApiEnabled,
-    hasActiveLicense,
-    setHasActiveLicense,
-    getActiveLicenseStatus,
     setSupportsImages,
   } = useApp();
 
-  const [licenseKey, setLicenseKey] = useState("");
-  const [storedLicenseKey, setStoredLicenseKey] = useState<string | null>(null);
-  const [maskedLicenseKey, setMaskedLicenseKey] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [models, setModels] = useState<Model[]>([]);
   const [isModelsLoading, setIsModelsLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
@@ -76,7 +51,7 @@ export const PluelyApiSetup = () => {
 
   // Load license status on component mount
   useEffect(() => {
-    loadLicenseStatus();
+    loadPluelyModel();
     if (!fetchInitiated.current) {
       fetchInitiated.current = true;
       fetchModels();
@@ -102,23 +77,10 @@ export const PluelyApiSetup = () => {
     }
   };
 
-  const loadLicenseStatus = async () => {
+  const loadPluelyModel = async () => {
     try {
       // Get all stored data in one call
       const storage = await invoke<StorageResult>("secure_storage_get");
-
-      if (storage.license_key) {
-        setStoredLicenseKey(storage.license_key);
-
-        // Get masked version from Tauri command
-        const masked = await invoke<string>("mask_license_key_cmd", {
-          licenseKey: storage.license_key,
-        });
-        setMaskedLicenseKey(masked);
-      } else {
-        setStoredLicenseKey(null);
-        setMaskedLicenseKey(null);
-      }
 
       if (storage.selected_pluely_model) {
         try {
@@ -132,97 +94,8 @@ export const PluelyApiSetup = () => {
         setSelectedModel(null);
       }
     } catch (err) {
-      console.error("Failed to load license status:", err);
-      // If we can't read from storage, assume no license is stored
-      setStoredLicenseKey(null);
-      setMaskedLicenseKey(null);
+      console.error("Failed to load model selection:", err);
       setSelectedModel(null);
-    }
-  };
-
-  const handleActivateLicense = async () => {
-    if (!licenseKey.trim()) {
-      setError("Please enter a license key");
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      const response: ActivationResponse = await invoke(
-        "activate_license_api",
-        {
-          licenseKey: licenseKey.trim(),
-        }
-      );
-
-      if (response.activated && response.instance) {
-        // Store the license data securely in one call
-        await invoke("secure_storage_save", {
-          items: [
-            {
-              key: LICENSE_KEY_STORAGE_KEY,
-              value: licenseKey.trim(),
-            },
-            {
-              key: INSTANCE_ID_STORAGE_KEY,
-              value: response.instance.id,
-            },
-          ],
-        });
-
-        setSuccess("License activated successfully!");
-        setLicenseKey(""); // Clear the input
-
-        // Auto-enable Pluely API when license is activated
-        if (!response?.is_dev_license) {
-          setPluelyApiEnabled(true);
-        }
-
-        await loadLicenseStatus(); // Reload status
-        await fetchModels();
-        await getActiveLicenseStatus();
-      } else {
-        setError(response.error || "Failed to activate license");
-      }
-    } catch (err) {
-      console.error("License activation failed:", err);
-      setError(typeof err === "string" ? err : "Failed to activate license");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleRemoveLicense = async () => {
-    setIsLoading(true);
-    setError(null);
-    setSuccess(null);
-    setHasActiveLicense(false);
-    try {
-      // Remove all license data from secure storage in one call
-      await invoke("secure_storage_remove", {
-        keys: [
-          LICENSE_KEY_STORAGE_KEY,
-          INSTANCE_ID_STORAGE_KEY,
-          SELECTED_PLUELY_MODEL_STORAGE_KEY,
-        ],
-      });
-
-      setSuccess("License removed successfully!");
-
-      // Disable Pluely API when license is removed
-      setPluelyApiEnabled(false);
-
-      await fetchModels();
-      await loadLicenseStatus(); // Reload status
-    } catch (err) {
-      console.error("Failed to remove license:", err);
-      setError("Failed to remove license");
-    } finally {
-      setIsLoading(false);
-      await invoke("deactivate_license_api");
     }
   };
 
@@ -256,12 +129,6 @@ export const PluelyApiSetup = () => {
     setIsPopoverOpen(open);
     if (open) {
       setSearchValue(""); // Reset search when popover opens
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !storedLicenseKey) {
-      handleActivateLicense();
     }
   };
 
@@ -304,14 +171,6 @@ export const PluelyApiSetup = () => {
           </div>
         )}
 
-        {/* Success Message */}
-        {success && (
-          <div className="p-3 rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
-            <p className="text-sm text-green-700 dark:text-green-400">
-              {success}
-            </p>
-          </div>
-        )}
         <Header title={title} description={description} />
         <Popover
           modal={true}
@@ -395,102 +254,19 @@ export const PluelyApiSetup = () => {
               : "⚠️ This model ONLY accepts text input. Do NOT upload images - they will not work with this model. Use a text+image→text model if you need image support."}
           </div>
         )}
-        {/* License Key Input or Display */}
-        <div className="space-y-2">
-          {!storedLicenseKey ? (
-            <>
-              <div className="space-y-1">
-                <label className="text-sm font-medium">License Key</label>
-                <p className="text-sm font-medium text-muted-foreground">
-                  After completing your purchase, you'll receive a license key
-                  via email. Paste it below to activate.
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  type="password"
-                  placeholder="Enter your license key (e.g., 38b1460a-5104-4067-a91d-77b872934d51)"
-                  value={licenseKey}
-                  onChange={(value) => {
-                    setLicenseKey(
-                      typeof value === "string" ? value : value.target.value
-                    );
-                    setError(null); // Clear error when user types
-                    setSuccess(null); // Clear success when user types
-                  }}
-                  onKeyDown={handleKeyDown}
-                  disabled={isLoading}
-                  className="flex-1 h-11 border-1 border-input/50 focus:border-primary/50 transition-colors"
-                />
-                <Button
-                  onClick={handleActivateLicense}
-                  disabled={isLoading || !licenseKey.trim()}
-                  size="icon"
-                  className="shrink-0 h-11 w-11"
-                  title="Activate License"
-                >
-                  {isLoading ? (
-                    <LoaderIcon className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <KeyIcon className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-            </>
-          ) : (
-            <>
-              <label className="text-xs lg:text-sm font-medium">
-                Current License
-              </label>
-              <div className="flex gap-2">
-                <Input
-                  type="text"
-                  value={maskedLicenseKey || ""}
-                  disabled={true}
-                  className="flex-1 h-11 border-1 border-input/50 bg-muted/50"
-                />
-                <Button
-                  onClick={handleRemoveLicense}
-                  disabled={isLoading}
-                  size="icon"
-                  variant="destructive"
-                  className="shrink-0 h-11 w-11"
-                  title="Remove License"
-                >
-                  {isLoading ? (
-                    <LoaderIcon className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <TrashIcon className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-              {storedLicenseKey ? (
-                <div className="-mt-1">
-                  <p className="text-sm font-medium text-muted-foreground select-auto">
-                    If you need any help or any assistance, contact
-                    support@pluely.com
-                  </p>
-                </div>
-              ) : null}
-            </>
-          )}
-        </div>
       </div>
       <div className="flex justify-between items-center">
         <Header
           title={`${pluelyApiEnabled ? "Disable" : "Enable"} Pluely API`}
           description={
-            storedLicenseKey
-              ? pluelyApiEnabled
-                ? "Using all pluely APIs for audio, and chat."
-                : "Using all your own AI Providers for audio, and chat."
-              : "A valid license is required to enable Pluely API or you can use your own AI Providers and STT Providers."
+            pluelyApiEnabled
+              ? "Using Pluely APIs for audio and chat."
+              : "Using your own AI Providers for audio and chat."
           }
         />
         <Switch
           checked={pluelyApiEnabled}
           onCheckedChange={setPluelyApiEnabled}
-          disabled={!storedLicenseKey || !hasActiveLicense} // Disable if no license is stored
         />
       </div>
     </div>
