@@ -93,6 +93,12 @@ Pluely now supports two assistant modes, configurable from the Mode toggle in th
 - **Personal Mode (default):** Behaves exactly as the app does today.
 - **Meeting Mode:** Maintains a Live Summary panel with rolling summary bullets, decisions, and action items. The summary updates automatically as new audio transcripts, screenshots, and messages stream in. Use **Update now** to force a refresh or **Clear** to reset the summary.
 
+**Meeting Mode highlights**
+
+- Live Summary panel with rolling summary, decisions, and action items (owner + due dates when detected).
+- Automatic updates while new audio, screenshots, and user messages stream in.
+- Mode selection persists across app restarts.
+
 ## Voice Input
 
 Record your voice and convert it to text using advanced speech-to-text providers. The voice input feature supports multiple STT providers including OpenAI Whisper, ElevenLabs, Groq Whisper, and custom providers. Voice activity detection automatically identifies when you're speaking and processes your audio accordingly.
