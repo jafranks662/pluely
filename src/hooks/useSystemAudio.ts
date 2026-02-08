@@ -10,6 +10,13 @@ import {
   STORAGE_KEYS,
 } from "@/config";
 import {
+  clearSummary,
+  createEmptySummary,
+  ingestDelta,
+  scheduleUpdates,
+  startMeeting,
+  stopMeeting,
+  tick,
   safeLocalStorage,
   shouldUsePluelyAPI,
   generateConversationTitle,
@@ -18,7 +25,7 @@ import {
   generateConversationId,
   generateMessageId,
 } from "@/lib";
-import { Message } from "@/types/completion";
+import { ConversationMode, LiveSummaryData, Message } from "@/types";
 
 // VAD Configuration interface matching Rust
 export interface VadConfig {
@@ -61,6 +68,9 @@ export interface ChatConversation {
   messages: ChatMessage[];
   createdAt: number;
   updatedAt: number;
+  mode?: ConversationMode;
+  liveSummary?: LiveSummaryData;
+  liveSummaryUpdatedAt?: number;
 }
 
 export type useSystemAudioType = ReturnType<typeof useSystemAudio>;
@@ -93,6 +103,13 @@ export function useSystemAudio() {
     createdAt: 0,
     updatedAt: 0,
   });
+  const [liveSummary, setLiveSummary] = useState<LiveSummaryData>(
+    createEmptySummary()
+  );
+  const [liveSummaryUpdatedAt, setLiveSummaryUpdatedAt] = useState<number | null>(
+    null
+  );
+  const [isSummaryUpdating, setIsSummaryUpdating] = useState(false);
 
   // Context management states
   const [useSystemPrompt, setUseSystemPrompt] = useState<boolean>(true);
@@ -105,10 +122,12 @@ export function useSystemAudio() {
     allAiProviders,
     systemPrompt,
     selectedAudioDevices,
+    mode,
   } = useApp();
   const abortControllerRef = useRef<AbortController | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isSavingRef = useRef<boolean>(false);
+  const meetingConversationIdRef = useRef<string | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   // Load context settings and VAD config from localStorage on mount
@@ -136,7 +155,7 @@ export function useSystemAudio() {
         console.error("Failed to load VAD config:", error);
       }
     }
-  }, []);
+  }, [mode]);
 
   // Load quick actions from localStorage on mount
   useEffect(() => {
@@ -154,7 +173,7 @@ export function useSystemAudio() {
     } else {
       setQuickActions(DEFAULT_QUICK_ACTIONS);
     }
-  }, []);
+  }, [mode]);
 
   // Handle continuous recording progress events AND error events
   useEffect(() => {
@@ -216,6 +235,13 @@ export function useSystemAudio() {
     };
   }, []);
 
+  useEffect(() => {
+    setConversation((prev) => ({
+      ...prev,
+      mode,
+    }));
+  }, [mode]);
+
   // Handle single speech detection event (both VAD and continuous modes)
   useEffect(() => {
     let speechUnlisten: (() => void) | undefined;
@@ -273,6 +299,9 @@ export function useSystemAudio() {
               ]);
 
               if (transcription.trim()) {
+                if (mode === "meeting") {
+                  ingestDelta(transcription, "audio");
+                }
                 setLastTranscription(transcription);
                 setError("");
 
@@ -389,6 +418,9 @@ export function useSystemAudio() {
 
   const handleQuickActionClick = async (action: string) => {
     setError("");
+    if (mode === "meeting") {
+      ingestDelta(action, "user");
+    }
 
     const effectiveSystemPrompt = useSystemPrompt
       ? systemPrompt || DEFAULT_SYSTEM_PROMPT
@@ -447,7 +479,13 @@ export function useSystemAudio() {
       console.error("Failed to start continuous recording:", err);
       setError(`Failed to start recording: ${err}`);
     }
-  }, [vadConfig, selectedAudioDevices.output.id]);
+  }, [
+    vadConfig,
+    selectedAudioDevices.output.id,
+    mode,
+    allAiProviders,
+    selectedAIProvider,
+  ]);
 
   // Ignore current recording (stop without transcription)
   const ignoreContinuousRecording = useCallback(async () => {
@@ -565,13 +603,48 @@ export function useSystemAudio() {
 
       // Set up conversation
       const conversationId = generateConversationId("sysaudio");
+      const summaryState = createEmptySummary();
       setConversation({
         id: conversationId,
         title: "",
         messages: [],
         createdAt: 0,
         updatedAt: 0,
+        mode,
+        liveSummary: summaryState,
+        liveSummaryUpdatedAt: undefined,
       });
+      setLiveSummary(summaryState);
+      setLiveSummaryUpdatedAt(null);
+
+      if (mode === "meeting") {
+        startMeeting({
+          conversationId,
+          getAiConfig: () => ({
+            provider: allAiProviders.find(
+              (p) => p.id === selectedAIProvider.provider
+            ),
+            selectedProvider: selectedAIProvider,
+          }),
+          initialSummary: summaryState,
+          onSummaryUpdated: (summary, updatedAt) => {
+            setLiveSummary(summary);
+            setLiveSummaryUpdatedAt(updatedAt);
+            setConversation((prev) => ({
+              ...prev,
+              mode: "meeting",
+              liveSummary: summary,
+              liveSummaryUpdatedAt: updatedAt,
+              updatedAt: Math.max(prev.updatedAt, updatedAt),
+            }));
+          },
+          onError: (error) => {
+            console.error("Meeting summary update failed:", error);
+          },
+        });
+        scheduleUpdates();
+        meetingConversationIdRef.current = conversationId;
+      }
 
       setCapturing(true);
       setIsPopoverOpen(true);
@@ -603,10 +676,20 @@ export function useSystemAudio() {
       setError(errorMessage);
       setIsPopoverOpen(true);
     }
-  }, [vadConfig, selectedAudioDevices.output.id]);
+  }, [
+    vadConfig,
+    selectedAudioDevices.output.id,
+    mode,
+    allAiProviders,
+    selectedAIProvider,
+  ]);
 
   const stopCapture = useCallback(async () => {
     try {
+      if (mode === "meeting") {
+        await stopMeeting({ flush: true });
+        meetingConversationIdRef.current = null;
+      }
       // Abort any ongoing AI requests
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -632,7 +715,7 @@ export function useSystemAudio() {
       setError(`Failed to stop capture: ${errorMessage}`);
       console.error("Stop capture error:", err);
     }
-  }, []);
+  }, [mode]);
 
   // Manual stop for continuous recording
   const manualStopAndSend = useCallback(async () => {
@@ -713,6 +796,8 @@ export function useSystemAudio() {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
+      stopMeeting({ flush: true }).catch(() => {});
+      meetingConversationIdRef.current = null;
       invoke("stop_system_audio_capture").catch(() => {});
     };
   }, []);
@@ -764,12 +849,17 @@ export function useSystemAudio() {
   ]);
 
   const startNewConversation = useCallback(() => {
+    stopMeeting({ flush: true }).catch(() => {});
+    meetingConversationIdRef.current = null;
     setConversation({
       id: generateConversationId("sysaudio"),
       title: "",
       messages: [],
       createdAt: 0,
       updatedAt: 0,
+      mode,
+      liveSummary: createEmptySummary(),
+      liveSummaryUpdatedAt: undefined,
     });
     setLastTranscription("");
     setLastAIResponse("");
@@ -779,6 +869,8 @@ export function useSystemAudio() {
     setIsAIProcessing(false);
     setIsPopoverOpen(false);
     setUseSystemPrompt(true);
+    setLiveSummary(createEmptySummary());
+    setLiveSummaryUpdatedAt(null);
   }, []);
 
   // Update VAD configuration
@@ -801,6 +893,50 @@ export function useSystemAudio() {
       }
     }
   }, [vadConfig.enabled, capturing]);
+
+  useEffect(() => {
+    if (!capturing || !conversation.id) return;
+    if (mode === "meeting") {
+      if (meetingConversationIdRef.current === conversation.id) {
+        return;
+      }
+      startMeeting({
+        conversationId: conversation.id,
+        getAiConfig: () => ({
+          provider: allAiProviders.find(
+            (p) => p.id === selectedAIProvider.provider
+          ),
+          selectedProvider: selectedAIProvider,
+        }),
+        initialSummary: liveSummary,
+        onSummaryUpdated: (summary, updatedAt) => {
+          setLiveSummary(summary);
+          setLiveSummaryUpdatedAt(updatedAt);
+          setConversation((prev) => ({
+            ...prev,
+            mode: "meeting",
+            liveSummary: summary,
+            liveSummaryUpdatedAt: updatedAt,
+            updatedAt: Math.max(prev.updatedAt, updatedAt),
+          }));
+        },
+        onError: (error) => {
+          console.error("Meeting summary update failed:", error);
+        },
+      });
+      scheduleUpdates();
+      meetingConversationIdRef.current = conversation.id;
+    } else {
+      stopMeeting({ flush: true }).catch(() => {});
+      meetingConversationIdRef.current = null;
+    }
+  }, [
+    capturing,
+    conversation.id,
+    mode,
+    allAiProviders,
+    selectedAIProvider,
+  ]);
 
   // Keyboard arrow key support for scrolling (local shortcut)
   useEffect(() => {
@@ -924,5 +1060,26 @@ export function useSystemAudio() {
     ignoreContinuousRecording,
     // Scroll area ref for keyboard navigation
     scrollAreaRef,
+    liveSummary,
+    liveSummaryUpdatedAt,
+    isSummaryUpdating,
+    updateMeetingSummary: async () => {
+      setIsSummaryUpdating(true);
+      await tick({ force: true });
+      setIsSummaryUpdating(false);
+    },
+    clearMeetingSummary: () => {
+      clearSummary();
+      const cleared = createEmptySummary();
+      const updatedAt = Date.now();
+      setLiveSummary(cleared);
+      setLiveSummaryUpdatedAt(updatedAt);
+      setConversation((prev) => ({
+        ...prev,
+        mode: "meeting",
+        liveSummary: cleared,
+        liveSummaryUpdatedAt: updatedAt,
+      }));
+    },
   };
 }

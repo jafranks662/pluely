@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { ModeSwitcher } from "./ModeSwitcher";
+import { MeetingModeToggle } from "./MeetingModeToggle";
+import { LiveSummaryPanel } from "./LiveSummaryPanel";
 import { RecordingPanel } from "./RecordingPanel";
 import { ResultsSection } from "./ResultsSection";
 import { SettingsPanel } from "./SettingsPanel";
@@ -63,9 +65,14 @@ export const SystemAudio = (props: useSystemAudioType) => {
     startContinuousRecording,
     ignoreContinuousRecording,
     scrollAreaRef,
+    liveSummary,
+    liveSummaryUpdatedAt,
+    isSummaryUpdating,
+    updateMeetingSummary,
+    clearMeetingSummary,
   } = props;
 
-  const { hasActiveLicense, supportsImages } = useApp();
+  const { hasActiveLicense, supportsImages, mode, setMode } = useApp();
 
   // View mode toggle
   const [conversationMode, setConversationMode] = useState(false);
@@ -209,15 +216,22 @@ export const SystemAudio = (props: useSystemAudioType) => {
               <div className="flex items-center justify-between gap-2">
                 {/* Mode Switcher */}
                 {!setupRequired && (
-                  <ModeSwitcher
-                    isVadMode={isVadMode}
-                    onModeChange={handleModeChange}
-                    disabled={
-                      isRecordingInContinuousMode ||
-                      isProcessing ||
-                      isAIProcessing
-                    }
-                  />
+                  <div className="flex items-center gap-2 flex-1">
+                    <ModeSwitcher
+                      isVadMode={isVadMode}
+                      onModeChange={handleModeChange}
+                      disabled={
+                        isRecordingInContinuousMode ||
+                        isProcessing ||
+                        isAIProcessing
+                      }
+                    />
+                    <MeetingModeToggle
+                      mode={mode}
+                      onChange={setMode}
+                      disabled={isProcessing || isAIProcessing}
+                    />
+                  </div>
                 )}
                 {setupRequired && (
                   <h2 className="font-semibold text-sm">Setup Required</h2>
@@ -345,6 +359,15 @@ export const SystemAudio = (props: useSystemAudioType) => {
                       onStartRecording={startContinuousRecording}
                       onStopAndSend={manualStopAndSend}
                       onIgnore={ignoreContinuousRecording}
+                    />
+
+                    <LiveSummaryPanel
+                      mode={mode}
+                      summary={liveSummary}
+                      updatedAt={liveSummaryUpdatedAt}
+                      isUpdating={isSummaryUpdating}
+                      onUpdate={updateMeetingSummary}
+                      onClear={clearMeetingSummary}
                     />
 
                     {/* AI Response */}

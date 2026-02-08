@@ -4,6 +4,12 @@ import { useGlobalShortcuts } from "@/hooks";
 import { MAX_FILES } from "@/config";
 import { useApp } from "@/contexts";
 import {
+  createEmptySummary,
+  getCurrentSummary,
+  ingestDelta,
+  scheduleUpdates,
+  startMeeting,
+  stopMeeting,
   fetchAIResponse,
   saveConversation,
   getConversationById,
@@ -40,6 +46,18 @@ interface ChatConversation {
   messages: ChatMessage[];
   createdAt: number;
   updatedAt: number;
+  mode?: "personal" | "meeting";
+  liveSummary?: {
+    summary: string[];
+    decisions: string[];
+    actionItems: Array<{
+      text: string;
+      owner?: string;
+      due?: string;
+      status?: "open" | "done";
+    }>;
+  };
+  liveSummaryUpdatedAt?: number;
 }
 
 interface CompletionState {
@@ -59,6 +77,7 @@ export const useCompletion = () => {
     systemPrompt,
     screenshotConfiguration,
     setScreenshotConfiguration,
+    mode,
   } = useApp();
   const globalShortcuts = useGlobalShortcuts();
 
@@ -89,14 +108,78 @@ export const useCompletion = () => {
     screenshotConfigRef.current = screenshotConfiguration;
   }, [screenshotConfiguration]);
 
+  useEffect(() => {
+    if (mode !== "meeting") {
+      stopMeeting({ flush: true }).catch(() => {});
+      meetingConversationIdRef.current = null;
+    }
+  }, [mode]);
+
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentRequestIdRef = useRef<string | null>(null);
+  const pendingConversationIdRef = useRef<string | null>(null);
+  const meetingConversationIdRef = useRef<string | null>(null);
+
+  const ensureMeetingSession = useCallback(
+    (conversationId: string) => {
+      if (mode !== "meeting") return;
+      if (meetingConversationIdRef.current === conversationId) return;
+      startMeeting({
+        conversationId,
+        getAiConfig: () => ({
+          provider: allAiProviders.find(
+            (p) => p.id === selectedAIProvider.provider
+          ),
+          selectedProvider: selectedAIProvider,
+        }),
+        initialSummary: getCurrentSummary() || createEmptySummary(),
+        onSummaryUpdated: async (summary, updatedAt) => {
+          try {
+            const existing = await getConversationById(conversationId);
+            const messages =
+              state.conversationHistory.length > 0
+                ? state.conversationHistory
+                : existing?.messages || [];
+            const title =
+              existing?.title ||
+              (messages[0]?.content
+                ? generateConversationTitle(messages[0].content)
+                : "Meeting");
+
+            await saveConversation({
+              id: conversationId,
+              title,
+              messages,
+              createdAt: existing?.createdAt || Date.now(),
+              updatedAt: Math.max(existing?.updatedAt || 0, updatedAt),
+              mode: "meeting",
+              liveSummary: summary,
+              liveSummaryUpdatedAt: updatedAt,
+            });
+          } catch (error) {
+            console.error("Failed to persist meeting summary:", error);
+          }
+        },
+        onError: (error) => {
+          console.error("Meeting summary update failed:", error);
+        },
+      });
+      scheduleUpdates();
+      meetingConversationIdRef.current = conversationId;
+    },
+    [
+      allAiProviders,
+      mode,
+      selectedAIProvider,
+      state.conversationHistory,
+    ]
+  );
 
   const setInput = useCallback((value: string) => {
     setState((prev) => ({ ...prev, input: value }));
-  }, []);
+  }, [mode]);
 
   const setResponse = useCallback((value: string) => {
     setState((prev) => ({ ...prev, response: value }));
@@ -146,6 +229,24 @@ export const useCompletion = () => {
           ...prev,
           input: speechText,
         }));
+      }
+
+      const conversationId =
+        state.currentConversationId ||
+        pendingConversationIdRef.current ||
+        generateConversationId("chat");
+
+      if (!state.currentConversationId) {
+        pendingConversationIdRef.current = conversationId;
+        setState((prev) => ({
+          ...prev,
+          currentConversationId: conversationId,
+        }));
+      }
+
+      if (mode === "meeting") {
+        ensureMeetingSession(conversationId);
+        ingestDelta(input, "user");
       }
 
       // Generate unique request ID
@@ -264,7 +365,8 @@ export const useCompletion = () => {
           await saveCurrentConversation(
             input,
             fullResponse,
-            state.attachedFiles
+            state.attachedFiles,
+            conversationId
           );
           // Clear input and attached files after saving
           setState((prev) => ({
@@ -287,10 +389,13 @@ export const useCompletion = () => {
     [
       state.input,
       state.attachedFiles,
+      state.currentConversationId,
       selectedAIProvider,
       allAiProviders,
       systemPrompt,
       state.conversationHistory,
+      mode,
+      ensureMeetingSession,
     ]
   );
 
@@ -347,6 +452,11 @@ export const useCompletion = () => {
   }, []);
 
   const startNewConversation = useCallback(() => {
+    if (mode === "meeting") {
+      stopMeeting({ flush: true }).catch(() => {});
+    }
+    pendingConversationIdRef.current = null;
+    meetingConversationIdRef.current = null;
     setState((prev) => ({
       ...prev,
       currentConversationId: null,
@@ -357,13 +467,14 @@ export const useCompletion = () => {
       isLoading: false,
       attachedFiles: [],
     }));
-  }, []);
+  }, [mode]);
 
   const saveCurrentConversation = useCallback(
     async (
       userMessage: string,
       assistantResponse: string,
-      _attachedFiles: AttachedFile[]
+      _attachedFiles: AttachedFile[],
+      conversationIdOverride?: string
     ) => {
       // Validate inputs
       if (!userMessage || !assistantResponse) {
@@ -372,7 +483,9 @@ export const useCompletion = () => {
       }
 
       const conversationId =
-        state.currentConversationId || generateConversationId("chat");
+        conversationIdOverride ||
+        state.currentConversationId ||
+        generateConversationId("chat");
       const timestamp = Date.now();
 
       const userMsg: ChatMessage = {
@@ -415,6 +528,10 @@ export const useCompletion = () => {
         messages: newMessages,
         createdAt: existingConversation?.createdAt || timestamp,
         updatedAt: timestamp,
+        mode: mode || "personal",
+        liveSummary:
+          mode === "meeting" ? getCurrentSummary() || undefined : undefined,
+        liveSummaryUpdatedAt: mode === "meeting" ? Date.now() : undefined,
       };
 
       try {
@@ -425,6 +542,7 @@ export const useCompletion = () => {
           currentConversationId: conversationId,
           conversationHistory: newMessages,
         }));
+        pendingConversationIdRef.current = null;
       } catch (error) {
         console.error("Failed to save conversation:", error);
         // Show error to user
@@ -434,7 +552,7 @@ export const useCompletion = () => {
         }));
       }
     },
-    [state.currentConversationId, state.conversationHistory]
+    [state.currentConversationId, state.conversationHistory, mode]
   );
 
   // Listen for conversation events from the main ChatHistory component
@@ -552,6 +670,24 @@ export const useCompletion = () => {
 
       try {
         if (prompt) {
+          const conversationId =
+            state.currentConversationId ||
+            pendingConversationIdRef.current ||
+            generateConversationId("chat");
+
+          if (!state.currentConversationId) {
+            pendingConversationIdRef.current = conversationId;
+            setState((prev) => ({
+              ...prev,
+              currentConversationId: conversationId,
+            }));
+          }
+
+          if (mode === "meeting") {
+            ensureMeetingSession(conversationId);
+            ingestDelta(prompt, "user");
+          }
+
           // Auto mode: Submit directly to AI with screenshot
           const attachedFile: AttachedFile = {
             id: Date.now().toString(),
@@ -648,9 +784,12 @@ export const useCompletion = () => {
 
             // Save the conversation after successful completion
             if (fullResponse) {
-              await saveCurrentConversation(prompt, fullResponse, [
-                attachedFile,
-              ]);
+              await saveCurrentConversation(
+                prompt,
+                fullResponse,
+                [attachedFile],
+                conversationId
+              );
               // Clear input after saving
               setState((prev) => ({
                 ...prev,
@@ -701,11 +840,14 @@ export const useCompletion = () => {
     [
       state.attachedFiles.length,
       state.conversationHistory,
+      state.currentConversationId,
       selectedAIProvider,
       allAiProviders,
       systemPrompt,
       saveCurrentConversation,
       inputRef,
+      mode,
+      ensureMeetingSession,
     ]
   );
 
@@ -987,6 +1129,10 @@ export const useCompletion = () => {
         abortControllerRef.current = null;
       }
       currentRequestIdRef.current = null;
+      if (mode === "meeting") {
+        stopMeeting({ flush: true }).catch(() => {});
+      }
+      meetingConversationIdRef.current = null;
     };
   }, []);
 

@@ -86,6 +86,13 @@ Capture and transcribe system audio in real-time. The system audio feature allow
 
 The system audio capture includes voice activity detection, real-time audio visualization, and automatic processing status indicators. Configure your preferred audio input devices in the Audio Settings page.
 
+## Assistant Modes
+
+Pluely now supports two assistant modes, configurable from the Mode toggle in the main header:
+
+- **Personal Mode (default):** Behaves exactly as the app does today.
+- **Meeting Mode:** Maintains a Live Summary panel with rolling summary bullets, decisions, and action items. The summary updates automatically as new audio transcripts, screenshots, and messages stream in. Use **Update now** to force a refresh or **Clear** to reset the summary.
+
 ## Voice Input
 
 Record your voice and convert it to text using advanced speech-to-text providers. The voice input feature supports multiple STT providers including OpenAI Whisper, ElevenLabs, Groq Whisper, and custom providers. Voice activity detection automatically identifies when you're speaking and processes your audio accordingly.

@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist-tests",
+    "module": "ESNext",
+    "allowImportingTsExtensions": false
+  },
+  "include": ["scripts/tests/run-tests.tsx", "src"]
+}

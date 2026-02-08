@@ -2,6 +2,12 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useApp } from "@/contexts";
 import { MAX_FILES } from "@/config";
 import {
+  createEmptySummary,
+  getCurrentSummary,
+  ingestDelta,
+  scheduleUpdates,
+  startMeeting,
+  stopMeeting,
   fetchAIResponse,
   saveConversation,
   getConversationById,
@@ -37,6 +43,18 @@ interface ChatConversation {
   messages: ChatMessage[];
   createdAt: number;
   updatedAt: number;
+  mode?: "personal" | "meeting";
+  liveSummary?: {
+    summary: string[];
+    decisions: string[];
+    actionItems: Array<{
+      text: string;
+      owner?: string;
+      due?: string;
+      status?: "open" | "done";
+    }>;
+  };
+  liveSummaryUpdatedAt?: number;
 }
 
 interface ChatCompletionState {
@@ -61,6 +79,7 @@ export const useChatCompletion = (
     allSttProviders,
     selectedAudioDevices,
     hasActiveLicense,
+    mode,
   } = useApp();
 
   const [state, setState] = useState<ChatCompletionState>({
@@ -79,6 +98,7 @@ export const useChatCompletion = (
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentRequestIdRef = useRef<string | null>(null);
+  const meetingConversationIdRef = useRef<string | null>(null);
   const isProcessingScreenshotRef = useRef(false);
   const screenshotConfigRef = useRef(screenshotConfiguration);
   const hasCheckedPermissionRef = useRef(false);
@@ -87,6 +107,77 @@ export const useChatCompletion = (
   useEffect(() => {
     screenshotConfigRef.current = screenshotConfiguration;
   }, [screenshotConfiguration]);
+
+  const ensureMeetingSession = useCallback(
+    (initialSummary?: ChatConversation["liveSummary"]) => {
+      if (mode !== "meeting" || !conversationId) return;
+      if (meetingConversationIdRef.current === conversationId) return;
+
+      startMeeting({
+        conversationId,
+        getAiConfig: () => ({
+          provider: allAiProviders.find(
+            (p) => p.id === selectedAIProvider.provider
+          ),
+          selectedProvider: selectedAIProvider,
+        }),
+        initialSummary: initialSummary || createEmptySummary(),
+        onSummaryUpdated: async (summary, updatedAt) => {
+          try {
+            const existing = await getConversationById(conversationId);
+            const messagesToSave = messages?.messages || existing?.messages || [];
+            const title =
+              existing?.title ||
+              messages?.title ||
+              (messagesToSave[0]?.content
+                ? generateConversationTitle(messagesToSave[0].content)
+                : "Meeting");
+
+            await saveConversation({
+              id: conversationId,
+              title,
+              messages: messagesToSave,
+              createdAt:
+                existing?.createdAt || messages?.createdAt || Date.now(),
+              updatedAt: Math.max(existing?.updatedAt || 0, updatedAt),
+              mode: "meeting",
+              liveSummary: summary,
+              liveSummaryUpdatedAt: updatedAt,
+            });
+
+            const refreshed = await getConversationById(conversationId);
+            if (refreshed) {
+              setMessages(refreshed);
+            }
+          } catch (error) {
+            console.error("Failed to persist meeting summary:", error);
+          }
+        },
+        onError: (error) => {
+          console.error("Meeting summary update failed:", error);
+        },
+      });
+      scheduleUpdates();
+      meetingConversationIdRef.current = conversationId;
+    },
+    [
+      mode,
+      conversationId,
+      allAiProviders,
+      selectedAIProvider,
+      messages,
+      setMessages,
+    ]
+  );
+
+  useEffect(() => {
+    if (mode === "meeting" && conversationId) {
+      ensureMeetingSession(messages?.liveSummary);
+    } else {
+      stopMeeting({ flush: true }).catch(() => {});
+      meetingConversationIdRef.current = null;
+    }
+  }, [mode, conversationId, ensureMeetingSession, messages?.liveSummary]);
 
   const scrollToBottom = () => {
     const responseSettings = getResponseSettings();
@@ -143,6 +234,11 @@ export const useChatCompletion = (
           ...prev,
           input: speechText,
         }));
+      }
+
+      if (mode === "meeting") {
+        ensureMeetingSession(messages?.liveSummary);
+        ingestDelta(input, "user");
       }
 
       // Generate unique request ID
@@ -343,6 +439,10 @@ export const useChatCompletion = (
               messages?.createdAt ||
               timestamp,
             updatedAt: timestamp,
+            mode: mode || "personal",
+            liveSummary:
+              mode === "meeting" ? getCurrentSummary() || undefined : undefined,
+            liveSummaryUpdatedAt: mode === "meeting" ? Date.now() : undefined,
           };
 
           try {
@@ -383,6 +483,8 @@ export const useChatCompletion = (
       messages,
       conversationId,
       setMessages,
+      mode,
+      ensureMeetingSession,
     ]
   );
 
@@ -685,8 +787,11 @@ export const useChatCompletion = (
         abortControllerRef.current = null;
       }
       currentRequestIdRef.current = null;
+      if (mode === "meeting") {
+        stopMeeting({ flush: true }).catch(() => {});
+      }
     };
-  }, []);
+  }, [mode]);
 
   return {
     input: state.input,

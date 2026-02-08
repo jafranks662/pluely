@@ -17,7 +17,12 @@ import {
   CursorType,
   updateCursorType,
 } from "@/lib/storage";
-import { IContextType, ScreenshotConfig, TYPE_PROVIDER } from "@/types";
+import {
+  ConversationMode,
+  IContextType,
+  ScreenshotConfig,
+  TYPE_PROVIDER,
+} from "@/types";
 import curl2Json from "@bany/curl-to-json";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -74,6 +79,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     safeLocalStorage.getItem(STORAGE_KEYS.SYSTEM_PROMPT) ||
       DEFAULT_SYSTEM_PROMPT
   );
+  const [mode, setModeState] = useState<ConversationMode>(() => {
+    const storedMode = safeLocalStorage.getItem(STORAGE_KEYS.APP_MODE);
+    return storedMode === "meeting" ? "meeting" : "personal";
+  });
 
   const [selectedAudioDevices, setSelectedAudioDevices] = useState<{
     input: { id: string; name: string };
@@ -137,6 +146,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return stored === null ? true : stored === "true";
   });
 
+  const setMode = (nextMode: ConversationMode) => {
+    setModeState(nextMode);
+    safeLocalStorage.setItem(STORAGE_KEYS.APP_MODE, nextMode);
+  };
+
   // Wrapper to sync supportsImages to localStorage
   const setSupportsImages = (value: boolean) => {
     setSupportsImagesState(value);
@@ -196,6 +210,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (savedSystemPrompt) {
       setSystemPrompt(savedSystemPrompt || DEFAULT_SYSTEM_PROMPT);
     }
+
+    const savedMode = safeLocalStorage.getItem(STORAGE_KEYS.APP_MODE);
+    setModeState(savedMode === "meeting" ? "meeting" : "personal");
 
     // Load screenshot configuration
     const savedScreenshotConfig = safeLocalStorage.getItem(
@@ -441,7 +458,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         e.key === STORAGE_KEYS.SYSTEM_PROMPT ||
         e.key === STORAGE_KEYS.SCREENSHOT_CONFIG ||
         e.key === STORAGE_KEYS.CUSTOMIZABLE ||
-        e.key === STORAGE_KEYS.SELECTED_AUDIO_DEVICES
+        e.key === STORAGE_KEYS.SELECTED_AUDIO_DEVICES ||
+        e.key === STORAGE_KEYS.APP_MODE
       ) {
         loadData();
       }
@@ -681,6 +699,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setCursorType,
     supportsImages,
     setSupportsImages,
+    mode,
+    setMode,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
