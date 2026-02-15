@@ -38,7 +38,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "build:msi": "npm run build && npm run tauri -- build"
   },
   "dependencies": {
     "@bany/curl-to-json": "^1.2.8",
