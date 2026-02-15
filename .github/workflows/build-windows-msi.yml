@@ -1,4 +1,4 @@
-name: Build Windows MSI
+name: Build Windows Installers
 
 on:
   push:
@@ -34,7 +34,7 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      - name: Build Tauri bundle (MSI)
+      - name: Build Tauri bundle (MSI + EXE)
         run: npm run tauri -- build
 
       - name: Code signing: decode PFX (optional)
@@ -80,3 +80,11 @@ jobs:
           path: |
             src-tauri/target/release/bundle/msi/*.msi
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pluely-windows-exe
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
