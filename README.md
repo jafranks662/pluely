@@ -459,6 +459,20 @@ npm run tauri dev
 npm run tauri build
 ```
 
+#### Tauri updater signing key setup (required for release builds)
+
+This project uses **Tauri v2 updater signing** and expects a minisign **secret** key in `TAURI_SIGNING_PRIVATE_KEY` (legacy fallback: `TAURI_PRIVATE_KEY`) plus `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+
+Use `cat` when exporting the key so newlines are preserved:
+
+```bash
+export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/pluely.key)"
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<your-key-password>"
+npm run check:tauri-signing-key
+```
+
+If your key is in CI secrets, store it as base64 (`TAURI_SIGNING_PRIVATE_KEY_BASE64`) and decode it at build time before running `npm run check:tauri-signing-key`.
+
 This creates platform-specific installers in `src-tauri/target/release/bundle/`:
 
 - **macOS**: `.dmg`
