@@ -38,6 +38,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "check:tauri-signing-key": "node scripts/check-tauri-signing-key.mjs",
     "tauri": "tauri",
     "build:msi": "npm run build && npm run tauri -- build"
   },
