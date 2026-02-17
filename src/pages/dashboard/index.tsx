@@ -1,17 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { GetLicense } from "@/components";
 import { PluelyApiSetup, Usage } from "./components";
 import { PageLayout } from "@/layouts";
 import { useApp } from "@/contexts";
 
 const Dashboard = () => {
-  const { hasActiveLicense } = useApp();
+  const { pluelyApiEnabled } = useApp();
   const [activity, setActivity] = useState<any>(null);
   const [loadingActivity, setLoadingActivity] = useState(false);
 
   const fetchActivity = useCallback(async () => {
-    if (!hasActiveLicense) {
+    if (!pluelyApiEnabled) {
       setActivity({ data: [], total_tokens_used: 0 });
       return;
     }
@@ -29,15 +28,15 @@ const Dashboard = () => {
     } finally {
       setLoadingActivity(false);
     }
-  }, [hasActiveLicense]);
+  }, [pluelyApiEnabled]);
 
   useEffect(() => {
-    if (hasActiveLicense) {
+    if (pluelyApiEnabled) {
       fetchActivity();
     } else {
       setActivity(null);
     }
-  }, [fetchActivity, hasActiveLicense]);
+  }, [fetchActivity, pluelyApiEnabled]);
 
   const activityData =
     activity && Array.isArray(activity.data) ? activity.data : [];
@@ -49,8 +48,7 @@ const Dashboard = () => {
   return (
     <PageLayout
       title="Dashboard"
-      description="Pluely license to unlock faster responses, quicker support and premium features."
-      rightSlot={!hasActiveLicense ? <GetLicense /> : null}
+      description="Monitor your usage and manage API preferences."
     >
       {/* Pluely API Setup */}
       <PluelyApiSetup />
