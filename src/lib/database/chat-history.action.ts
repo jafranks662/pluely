@@ -13,6 +13,9 @@ interface DbConversation {
   title: string;
   created_at: number;
   updated_at: number;
+  mode: "personal" | "meeting";
+  live_summary_json: string | null;
+  live_summary_updated_at: number | null;
 }
 
 /**
@@ -100,12 +103,17 @@ export async function createConversation(
   try {
     // Insert conversation
     await db.execute(
-      "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
+      "INSERT INTO conversations (id, title, created_at, updated_at, mode, live_summary_json, live_summary_updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
       [
         conversation.id,
         conversation.title,
         conversation.createdAt || Date.now(),
         conversation.updatedAt || Date.now(),
+        conversation.mode || "personal",
+        conversation.liveSummary
+          ? JSON.stringify(conversation.liveSummary)
+          : null,
+        conversation.liveSummaryUpdatedAt || null,
       ]
     );
 
@@ -183,6 +191,9 @@ export async function getAllConversations(): Promise<ChatConversation[]> {
       title: conv.title,
       createdAt: conv.created_at,
       updatedAt: conv.updated_at,
+      mode: conv.mode || "personal",
+      liveSummary: safeJsonParse(conv.live_summary_json, undefined),
+      liveSummaryUpdatedAt: conv.live_summary_updated_at ?? undefined,
       messages:
         messagesByConversation.get(conv.id)?.map((msg) => ({
           id: msg.id,
@@ -235,6 +246,9 @@ export async function getConversationById(
       title: conv.title,
       createdAt: conv.created_at,
       updatedAt: conv.updated_at,
+      mode: conv.mode || "personal",
+      liveSummary: safeJsonParse(conv.live_summary_json, undefined),
+      liveSummaryUpdatedAt: conv.live_summary_updated_at ?? undefined,
       messages: messages.map((msg) => ({
         id: msg.id,
         role: msg.role,
@@ -264,8 +278,17 @@ export async function updateConversation(
   try {
     // Update conversation
     const updateResult = await db.execute(
-      "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?",
-      [conversation.title, conversation.updatedAt, conversation.id]
+      "UPDATE conversations SET title = ?, updated_at = ?, mode = ?, live_summary_json = ?, live_summary_updated_at = ? WHERE id = ?",
+      [
+        conversation.title,
+        conversation.updatedAt,
+        conversation.mode || "personal",
+        conversation.liveSummary
+          ? JSON.stringify(conversation.liveSummary)
+          : null,
+        conversation.liveSummaryUpdatedAt || null,
+        conversation.id,
+      ]
     );
 
     if (updateResult.rowsAffected === 0) {
@@ -482,12 +505,17 @@ export async function migrateLocalStorageToSQLite(): Promise<{
 
         // Insert conversation
         await db.execute(
-          "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
+          "INSERT INTO conversations (id, title, created_at, updated_at, mode, live_summary_json, live_summary_updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
           [
             conversation.id,
             conversation.title,
             conversation.createdAt || Date.now(),
             conversation.updatedAt || Date.now(),
+            conversation.mode || "personal",
+            conversation.liveSummary
+              ? JSON.stringify(conversation.liveSummary)
+              : null,
+            conversation.liveSummaryUpdatedAt || null,
           ]
         );
 

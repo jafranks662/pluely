@@ -1,19 +1,16 @@
 # Pluely 🚀
 
-<a href="https://pluely.com/">
-  <img src="/images/app-image.png" alt="pluely banner" width="100%" />
-</a>
+<img src="/images/app-image.png" alt="pluely banner" width="100%" />
 
 ---
 
 [![Open Source](https://img.shields.io/badge/Open%20Source-❤️-blue)](https://github.com/iamsrikanthnani/pluely)
 [![Tauri](https://img.shields.io/badge/Built%20with-Tauri-orange)](https://tauri.app/)
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](https://reactjs.org/)
-[![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
 
 ### 💝 **Support the Project & Connect**
 
-[![Buy Me a Coffee](https://img.shields.io/badge/☕%20Buy%20Me%20a%20Coffee-Support%20Project-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/srikanthnani) &nbsp; [![Hire Me](https://img.shields.io/badge/💼%20Hire%20Me-Let's%20Connect-6366f1?style=for-the-badge&logo=gmail&logoColor=white)](mailto:srikanthnani1202@gmail.com?subject=Hiring%20Inquiry%20-%20Let's%20Connect&body=Hi%20Srikanth,%0D%0A%0D%0AI%20discovered%20your%20project%20Pluely%20I'm%20reaching%20out%20to%20discuss%20potential%20opportunities.%0D%0A%0D%0ABest%20regards,%0D%0A[Your%20Name]) &nbsp; [![Join Pluely](https://img.shields.io/badge/🤝%20Join%20Pluely-Let's%20connect-1e88e5?style=for-the-badge)](mailto:support@pluely.com?subject=Joining%20Pluely%20Inquiry&body=%5Badd%20your%20text%20here%5D%0D%0A%0D%0A---%0D%0APlease%20include%20links%20to%20your%20work%20or%20portfolio%2C%20and%20why%20are%20you%20intrested%20to%20join%20pluely.%20%20%0D%0AWe%20are%20primarily%20looking%20for%20marketing%20professionals%2C%20content%20writers%2C%20interns%2C%20and%20creative%20collaborators%20-%20but%20are%20open%20to%20all%20areas%20of%20expertise.%20%20%0D%0AWe%27ll%20be%20in%20touch%20if%20your%20profile%20is%20a%20good%20fit.)
+[![Buy Me a Coffee](https://img.shields.io/badge/☕%20Buy%20Me%20a%20Coffee-Support%20Project-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/srikanthnani) &nbsp; [![Hire Me](https://img.shields.io/badge/💼%20Hire%20Me-Let's%20Connect-6366f1?style=for-the-badge&logo=gmail&logoColor=white)](mailto:srikanthnani1202@gmail.com?subject=Hiring%20Inquiry%20-%20Let's%20Connect&body=Hi%20Srikanth,%0D%0A%0D%0AI%20discovered%20your%20project%20Pluely%20I'm%20reaching%20out%20to%20discuss%20potential%20opportunities.%0D%0A%0D%0ABest%20regards,%0D%0A[Your%20Name])
 
 **Socials:**
 [![GitHub](https://img.shields.io/badge/GitHub-iamsrikanthnani-black?style=flat&logo=github)](https://github.com/iamsrikanthnani)
@@ -29,17 +26,7 @@ This is the **open source version** of the $15M company [Cluely](https://cluely.
 
 ## 📥 **Download Pluely**
 
-<div align="center">
-
-### 🚀 **Get the Latest Release**
-
-[![Download for macOS](https://img.shields.io/badge/Download%20for-macOS-000000?style=for-the-badge&logo=apple&logoColor=white)](https://pluely.com/download/macos) &nbsp; [![Download for Linux](https://img.shields.io/badge/Download%20for-Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://pluely.com/download/linux) &nbsp; [![Download for Windows](https://img.shields.io/badge/Download%20for-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://pluely.com/download/windows)
-
-[![GitHub Release](https://img.shields.io/github/v/release/iamsrikanthnani/pluely?style=for-the-badge&logo=github&label=Latest%20Version)](https://pluely.com/releases) &nbsp; [![GitHub Downloads](https://img.shields.io/github/downloads/iamsrikanthnani/pluely/total?style=for-the-badge&logo=github&label=Total%20Downloads)](https://pluely.com/downloads)
-
-**Available formats:** `.dmg` (macOS) • `.msi` (Windows) • `.exe` (Windows) • `.deb` (Linux) • `.rpm` (Linux) • `.AppImage` (Linux)
-
-</div>
+Grab the latest release from the GitHub Releases page and choose the installer for your platform.
 
 ---
 
@@ -86,6 +73,19 @@ Capture and transcribe system audio in real-time. The system audio feature allow
 
 The system audio capture includes voice activity detection, real-time audio visualization, and automatic processing status indicators. Configure your preferred audio input devices in the Audio Settings page.
 
+## Assistant Modes
+
+Pluely now supports two assistant modes, configurable from the Mode toggle in the main header:
+
+- **Personal Mode (default):** Behaves exactly as the app does today.
+- **Meeting Mode:** Maintains a Live Summary panel with rolling summary bullets, decisions, and action items. The summary updates automatically as new audio transcripts, screenshots, and messages stream in. Use **Update now** to force a refresh or **Clear** to reset the summary.
+
+**Meeting Mode highlights**
+
+- Live Summary panel with rolling summary, decisions, and action items (owner + due dates when detected).
+- Automatic updates while new audio, screenshots, and user messages stream in.
+- Mode selection persists across app restarts.
+
 ## Voice Input
 
 Record your voice and convert it to text using advanced speech-to-text providers. The voice input feature supports multiple STT providers including OpenAI Whisper, ElevenLabs, Groq Whisper, and custom providers. Voice activity detection automatically identifies when you're speaking and processes your audio accordingly.
@@ -124,7 +124,7 @@ The Pluely Dashboard provides comprehensive access to all features and settings 
 
 ## Dashboard
 
-The main dashboard displays your Pluely license status and usage statistics. Activate your license key to unlock faster AI responses, premium features, and priority support. View your token usage and API activity over time with detailed charts showing daily consumption patterns. Refresh your activity data to see real-time updates of your API usage.
+The main dashboard displays your usage statistics. View your token usage and API activity over time with detailed charts showing daily consumption patterns. Refresh your activity data to see real-time updates of your API usage.
 
 ## Chats
 
@@ -336,7 +336,7 @@ All application settings, AI provider configurations, custom system prompts, key
 
 **Secure Credentials:**
 
-License keys and sensitive credentials are stored in encrypted secure storage in your application data directory, separate from other application data. API keys for AI providers are stored in localStorage and never sent to any server except directly to your chosen AI provider.
+Sensitive credentials are stored in encrypted secure storage in your application data directory, separate from other application data. API keys for AI providers are stored in localStorage and never sent to any server except directly to your chosen AI provider.
 
 **Zero Server Dependency:**
 
@@ -488,16 +488,11 @@ We keep contributions focused so Pluely stays lean and reliable.
 - ✅ We currently accept bug-fix pull requests and improvements to existing functionality.
 - ❌ We are not accepting feature requests, new AI/STT providers, or large UI overhauls via PR.
 
-### Earn a Lifetime Dev Pro License
-
-Want lifetime access to Pluely Dev Pro (a $120 value)? Head to our contribution hub at [pluely.com/contribute](https://pluely.com/contribute) and tackle one of the critical issues listed there. When your pull request closes an eligible GitHub issue, email the PR link to [support@pluely.com](mailto:support@pluely.com) to claim your reward. Only the issues on that page qualify, and the best-quality submission wins when multiple PRs target the same issue.
-
 ### How to Contribute
 
-1. Pick an eligible bug from [pluely.com/contribute](https://pluely.com/contribute) or another open issue that fits the guidelines above.
+1. Pick an eligible bug from the GitHub issues list that fits the guidelines above.
 2. Fork the repository and create a feature branch.
 3. Fix the bug, add tests where applicable, and submit a clear PR description.
-4. Email your PR link to [support@pluely.com](mailto:support@pluely.com) if it resolves a bounty issue.
 
 > 💡 **Like this project?** Consider [buying me a coffee ☕](https://www.buymeacoffee.com/srikanthnani) or [hiring me](mailto:srikanthnani1202@gmail.com?subject=Hiring%20Inquiry%20-%20Pluely%20Developer) for your next project!
 
@@ -508,12 +503,6 @@ Want lifetime access to Pluely Dev Pro (a $120 value)? Head to our contribution 
 3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
 4. **Push** to the branch (`git push origin feature/amazing-feature`)
 5. **Open** a Pull Request
-
----
-
-## 📄 License
-
-This project is licensed under the **GNU General Public License v3.0** - see the [LICENSE](LICENSE) file for details.
 
 ---
 
@@ -533,7 +522,6 @@ This project is licensed under the **GNU General Public License v3.0** - see the
 
 ## 🔗 Links
 
-- **Website**: [pluely.com](https://pluely.com/) (Pluely website)
 - **Website**: [cluely.com](https://cluely.com/) (Original Cluely)
 - **Documentation**: [GitHub Wiki](https://github.com/iamsrikanthnani/pluely/wiki)
 - **Issues**: [GitHub Issues](https://github.com/iamsrikanthnani/pluely/issues)
@@ -547,7 +535,6 @@ This project is licensed under the **GNU General Public License v3.0** - see the
 [![Twitter](https://img.shields.io/badge/Twitter-@truly__sn-black?style=for-the-badge&logo=twitter)](https://x.com/srikanthnani)&nbsp;
 [![Website](https://img.shields.io/badge/Website-srikanthnani.com-black?style=for-the-badge&logo=globe)](https://www.srikanthnani.com/)&nbsp;
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-iamsrikanthnani-black?style=for-the-badge&logo=linkedin)](https://www.linkedin.com/in/iamsrikanthnani/)&nbsp;
-[![License](https://img.shields.io/badge/License-GPL%20v3-black?style=for-the-badge&logo=gnu&logoColor=white)](LICENSE)
 
 ---
 

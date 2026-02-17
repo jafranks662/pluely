@@ -15,12 +15,30 @@ export interface ChatMessage {
   attachedFiles?: AttachedFile[];
 }
 
+export type ConversationMode = "personal" | "meeting";
+
+export interface LiveSummaryActionItem {
+  text: string;
+  owner?: string;
+  due?: string;
+  status?: "open" | "done";
+}
+
+export interface LiveSummaryData {
+  summary: string[];
+  decisions: string[];
+  actionItems: LiveSummaryActionItem[];
+}
+
 export interface ChatConversation {
   id: string;
   title: string;
   messages: ChatMessage[];
   createdAt: number;
   updatedAt: number;
+  mode?: ConversationMode;
+  liveSummary?: LiveSummaryData;
+  liveSummaryUpdatedAt?: number;
 }
 
 export interface CompletionState {

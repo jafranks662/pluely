@@ -1,5 +1,5 @@
 import { Dispatch, SetStateAction } from "react";
-import { ScreenshotConfig, TYPE_PROVIDER } from "@/types";
+import { ConversationMode, ScreenshotConfig, TYPE_PROVIDER } from "@/types";
 import { CursorType, CustomizableState } from "@/lib/storage";
 
 export type IContextType = {
@@ -58,4 +58,6 @@ export type IContextType = {
   setCursorType: (type: CursorType) => void;
   supportsImages: boolean;
   setSupportsImages: (value: boolean) => void;
+  mode: ConversationMode;
+  setMode: (mode: ConversationMode) => void;
 };

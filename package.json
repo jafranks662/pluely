@@ -38,9 +38,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "check:tauri-signing-key": "node scripts/check-tauri-signing-key.mjs",
     "tauri": "tauri",
-    "build:msi": "npm run build && npm run tauri -- build"
+    "test": "tsc -p tsconfig.tests.json && node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"./scripts/tests/alias-loader.mjs\", pathToFileURL(\"./\"));' --experimental-specifier-resolution=node dist-tests/scripts/tests/run-tests.js"
   },
   "dependencies": {
     "@bany/curl-to-json": "^1.2.8",

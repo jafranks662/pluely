@@ -17,5 +17,11 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/chat-history.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 3,
+            description: "add_meeting_mode_fields",
+            sql: include_str!("migrations/meeting-mode.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
