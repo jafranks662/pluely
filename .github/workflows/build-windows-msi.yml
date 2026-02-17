@@ -1,0 +1,90 @@
+name: Build Windows Installers
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build-msi:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Rust toolchain
+        run: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y
+          set PATH=%USERPROFILE%\.cargo\bin;%PATH%
+          rustup toolchain install stable-x86_64-pc-windows-msvc
+          rustup default stable-x86_64-pc-windows-msvc
+          rustup target add x86_64-pc-windows-msvc
+
+      - name: Install WiX Toolset
+        run: choco install wixtoolset -y
+
+      - name: Setup dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build Tauri bundle (MSI + EXE)
+        run: npm run tauri -- build
+
+      - name: Code signing: decode PFX (optional)
+        if: ${{ secrets.WINDOWS_PFX_BASE64 }}
+        shell: pwsh
+        run: |
+          Write-Host "Decoding PFX from secret..."
+          [IO.File]::WriteAllBytes('cert.pfx',[Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
+
+      - name: Code signing: sign built artifacts (optional)
+        if: ${{ secrets.WINDOWS_PFX_BASE64 }}
+        shell: pwsh
+        env:
+          PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
+          TIMESTAMP_URL: ${{ secrets.SIGNING_TIMESTAMP_URL }}
+        run: |
+          if (-not $env:TIMESTAMP_URL) { $env:TIMESTAMP_URL = 'http://timestamp.digicert.com' }
+          $signtool = 'signtool.exe'
+          Write-Host "Looking for signtool.exe in PATH..."
+          $found = Get-Command $signtool -ErrorAction SilentlyContinue
+          if (-not $found) {
+            Write-Host "signtool not found in PATH, trying Windows Kits locations..."
+            $possible = @(
+              "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\x64\\signtool.exe",
+              "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\signtool.exe"
+            )
+            foreach ($p in $possible) { if (Test-Path $p) { $signtool = $p; break } }
+          }
+          if (-not (Test-Path $signtool)) { Write-Host "signtool not available; skipping signing."; exit 0 }
+          $pfxPath = Join-Path $PWD 'cert.pfx'
+          $files = Get-ChildItem -Path src-tauri/target -Include *.msi,*.exe -Recurse -File
+          if ($files.Count -eq 0) { Write-Host "No MSI/EXE artifacts found to sign."; exit 0 }
+          foreach ($f in $files) {
+            Write-Host "Signing $($f.FullName)"
+            & $signtool sign /fd SHA256 /f $pfxPath /p $env:PFX_PASSWORD /tr $env:TIMESTAMP_URL /td SHA256 $f.FullName
+          }
+          Remove-Item $pfxPath -ErrorAction SilentlyContinue
+
+      - name: Upload MSI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pluely-windows-msi
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pluely-windows-exe
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe

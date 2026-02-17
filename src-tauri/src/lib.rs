@@ -33,6 +33,9 @@ fn get_app_version() -> String {
 pub fn run() {
     // Get PostHog API key
     let posthog_api_key = option_env!("POSTHOG_API_KEY").unwrap_or("").to_string();
+    let updater_enabled = option_env!("PLUELY_ENABLE_UPDATER")
+        .map(|value| value.eq_ignore_ascii_case("true") || value == "1")
+        .unwrap_or(false);
     let mut builder = tauri::Builder::default()
         .plugin(
             tauri_plugin_sql::Builder::default()
@@ -48,7 +51,6 @@ pub fn run() {
         .manage(shortcuts::LicenseState::default())
         .manage(shortcuts::MoveWindowState::default())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_keychain::init())
         .plugin(tauri_plugin_shell::init()) // Add shell plugin
@@ -66,6 +68,14 @@ pub fn run() {
             ..Default::default()
         }))
         .plugin(tauri_plugin_machine_uid::init());
+
+    if updater_enabled {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    } else {
+        eprintln!(
+            "Updater plugin is disabled. Set PLUELY_ENABLE_UPDATER=true at build time to enable it."
+        );
+    }
     #[cfg(target_os = "macos")]
     {
         builder = builder.plugin(tauri_nspanel::init());
