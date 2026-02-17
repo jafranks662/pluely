@@ -1,6 +1,6 @@
-# Building a Windows MSI for Pluely
+# Building Windows Installers (MSI + EXE) for Pluely
 
-This document explains how to build a Windows MSI installer for Pluely locally and in CI (GitHub Actions).
+This document explains how to build Windows installers for Pluely locally and in CI (GitHub Actions).
 
 Prerequisites (local Windows machine):
 
@@ -23,7 +23,7 @@ npm ci
 npm run build
 ```
 
-3. Build the Tauri bundle (this will create the MSI if WiX is present):
+3. Build the Tauri bundle:
 
 ```
 npm run tauri -- build
@@ -37,15 +37,20 @@ npm run build:msi
 
 Output
 
-- The built MSI is typically at `src-tauri/target/release/bundle/msi/Pluely-<version>.msi` (or under the `x86_64-pc-windows-msvc` triplet path).
+- MSI output is typically at `src-tauri/target/release/bundle/msi/Pluely_<version>_x64_en-US.msi` (or under the `x86_64-pc-windows-msvc` triplet path).
+- EXE output is typically at `src-tauri/target/release/bundle/nsis/Pluely_<version>_x64-setup.exe`.
 
 CI (GitHub Actions)
 
-- A workflow has been added at `.github/workflows/build-windows-msi.yml`. It runs on `windows-latest`, installs WiX, builds, and uploads the generated MSI as an artifact named `pluely-windows-msi`.
+- A workflow has been added at `.github/workflows/build-windows-msi.yml`. It runs on `windows-latest`, installs WiX, builds, and uploads both installers as artifacts:
+  - `pluely-windows-msi`
+  - `pluely-windows-exe`
 
 Notes
 
-- Building MSI requires the native Windows toolchain (MSVC) and WiX. Cross-building an MSI from Linux/macOS is not supported without complex cross-compilation setups.
+- Building MSI requires the native Windows toolchain (MSVC) and WiX.
+- EXE generation uses the NSIS target that Tauri builds on Windows.
+- Cross-building Windows installers from Linux/macOS is not supported without complex cross-compilation setups.
 
 Code signing (recommended)
 
